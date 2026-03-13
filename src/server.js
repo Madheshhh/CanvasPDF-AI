@@ -5,6 +5,7 @@ const app = express();
 const cors = require("cors");
 const multer= require("multer");
 const storage = multer.memoryStorage();
+const pdfParse = require("pdf-parse");
 
 const upload = multer({
     storage,
@@ -28,9 +29,47 @@ app.listen(PORT, ()=>{
 });
 
 
-app.post("/api/upload", upload.single("pdf"), (req,res) => {
+app.post("/api/upload", upload.single("pdf"), async(req,res,next) => {
+   try{
+     if(!req.file){
+        return res.status(400).json({
+            message:"No File uploaded!"
+        });
+    }
+     if(req.file?.mimetype !=="application/pdf"){
+        return res.status(415).json({
+            message:"Only PDF files are allowed."
+        });
+    }
+    const pdfData = await pdfParse(req.file.buffer);
+    
     res.status(200).json({
+        success: true,
         message: "Upload route reached",
-        fileRecieved: !!req.file
+        fileReceived: !!req.file,
+        textPreview: pdfData.text.slice(0,500),
+        fileInfo:{
+            originalname: req.file?.originalname,
+            mimetype:req.file?.mimetype,
+            size: Number(req.file?.size/(1024*1024)).toFixed(2) + " MB",
+            hasBuffer: Boolean(req.file?.buffer),
+           
+        },
+        numPages: pdfData.numpages,
+        textPreview: pdfData.text.slice(0,500)
     });
+    }
+    catch(error){
+        next(error);
+    }
 })
+
+app.use((err,req,res,next) =>{
+    const statusCode= err.statusCode || 500;
+    res.status(statusCode).json({
+        success: false,
+        message: err.message || "Internal Server Error"
+    })
+})
+
+
